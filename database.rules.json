@@ -1,0 +1,19 @@
+{
+  "rules": {
+    ".read": true,
+
+    "predictions": {
+      "$mid": {
+        ".write": "root.child('meta/ko/' + $mid).exists() && now < root.child('meta/ko/' + $mid).val()"
+      }
+    },
+
+    "scores": {
+      ".write": true
+    },
+
+    "meta": {
+      ".write": false
+    }
+  }
+}
