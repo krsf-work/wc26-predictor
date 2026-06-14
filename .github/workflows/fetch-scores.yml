@@ -6,7 +6,7 @@ on:
     # Client-side fetch handles live updates while the app is open;
     # this cron ensures final scores land in Firebase even when nobody
     # has the app open (e.g. 3 AM IST overnight matches).
-    - cron: '*/30 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch: # allow manual trigger from GitHub UI
 
 jobs:
