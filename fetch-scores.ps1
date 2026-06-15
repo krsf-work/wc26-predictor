@@ -1,4 +1,4 @@
-# WC26 Score Fetcher — runs automatically via Task Scheduler
+﻿# WC26 Score Fetcher — runs automatically via Task Scheduler
 $token  = '5d6ab1203ca84b03a93d2eb9c847ea6c'
 $fbBase = 'https://world-cup-score-predictor-default-rtdb.asia-southeast1.firebasedatabase.app'
 
@@ -70,8 +70,8 @@ foreach ($f in $fixtures) {
 
 function FindFid($h, $a) {
   $nh = Norm $h; $na = Norm $a
-  if ($lookup.ContainsKey("$nh|$na")) { return $lookup["$nh|$na"] }
-  if ($lookup.ContainsKey("$na|$nh")) { return $lookup["$na|$nh"] }
+  if ($lookup.ContainsKey("$nh|$na")) { return @{id=$lookup["$nh|$na"]; swap=$false} }
+  if ($lookup.ContainsKey("$na|$nh")) { return @{id=$lookup["$na|$nh"]; swap=$true} }
   return $null
 }
 
@@ -88,17 +88,21 @@ foreach ($m in $matches) {
   $apiH = if ($m.homeTeam.name) { $m.homeTeam.name } else { $m.homeTeam.shortName }
   $apiA = if ($m.awayTeam.name) { $m.awayTeam.name } else { $m.awayTeam.shortName }
 
-  $fid = FindFid $apiH $apiA
-  if (-not $fid) { Write-Warning "No match for: $apiH vs $apiA"; continue }
+  $result = FindFid $apiH $apiA
+  if (-not $result) { Write-Warning "No match for: $apiH vs $apiA"; continue }
+  $fid = $result.id
 
-  $h = $m.score.fullTime.home
-  $a = $m.score.fullTime.away
-  if ($null -eq $h -or $null -eq $a) { continue }
+  $scoreH = $m.score.fullTime.home
+  $scoreA = $m.score.fullTime.away
+  if ($null -eq $scoreH -or $null -eq $scoreA) { continue }
 
-  $body = "{`"h`":$h,`"a`":$a,`"status`":`"$st`"}"
+  # If API home/away order is reversed vs our fixture, swap so h=our home team
+  if ($result.swap) { $tmp = $scoreH; $scoreH = $scoreA; $scoreA = $tmp }
+
+  $body = "{`"h`":$scoreH,`"a`":$scoreA,`"status`":`"$st`"}"
   Invoke-WebRequest -Uri "$fbBase/scores/$fid.json" -Method Put -Body $body `
     -ContentType 'application/json' -UseBasicParsing | Out-Null
-  Write-Host "  $fid : $apiH $h-$a $apiA [$st]"
+  Write-Host "  $fid : $($fixtures | Where-Object {$_.id -eq $fid} | ForEach-Object {$_.h}) $scoreH-$scoreA $($fixtures | Where-Object {$_.id -eq $fid} | ForEach-Object {$_.a}) [$st]"
   $updated++
 }
 

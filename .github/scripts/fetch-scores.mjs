@@ -111,7 +111,9 @@ for (const f of FX) {
 
 function findFid(apiHome, apiAway) {
   const h = norm(apiHome), a = norm(apiAway);
-  return FX_LOOKUP[`${h}|${a}`] || FX_LOOKUP[`${a}|${h}`] || null;
+  if (FX_LOOKUP[`${h}|${a}`]) return { fid: FX_LOOKUP[`${h}|${a}`], swap: false };
+  if (FX_LOOKUP[`${a}|${h}`]) return { fid: FX_LOOKUP[`${a}|${h}`], swap: true };
+  return null;
 }
 
 async function main() {
@@ -136,20 +138,24 @@ async function main() {
     const apiAway = m.awayTeam?.name || m.awayTeam?.shortName;
     if (!apiHome || !apiAway) continue;
 
-    const fid = findFid(apiHome, apiAway);
-    if (!fid) {
+    const found = findFid(apiHome, apiAway);
+    if (!found) {
       console.warn(`  ⚠ No fixture ID for: "${apiHome}" vs "${apiAway}"`);
       skipped++;
       continue;
     }
+    const { fid, swap } = found;
 
-    const h = m.score?.fullTime?.home;
-    const a = m.score?.fullTime?.away;
-    if (h == null || a == null) {
+    const apiH = m.score?.fullTime?.home;
+    const apiA = m.score?.fullTime?.away;
+    if (apiH == null || apiA == null) {
       // Live match with no fullTime score yet — skip rather than writing null
       console.log(`  - ${fid}: ${apiHome} vs ${apiAway} [${st}] — score not yet available`);
       continue;
     }
+    // If API home/away order is reversed vs our fixture, swap scores so h=our home team
+    const h = swap ? apiA : apiH;
+    const a = swap ? apiH : apiA;
 
     const score = { h, a, status: st };
     const writeRes = await fetch(`${FIREBASE_DB}/scores/${fid}.json`, {
