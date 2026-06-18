@@ -333,6 +333,14 @@ html, body { height: 100%; background: var(--paper); color: var(--ink); font-fam
 .st-btn { width: 38px; height: 38px; border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--ink); display: flex; align-items: center; justify-content: center; }
 .st-btn:active { background: var(--rule); }
 .st-val { font-family: 'Archivo Black', sans-serif; font-size: 22px; min-width: 32px; text-align: center; color: var(--ink); }
+.score-editor { border-top: 1px solid var(--rule); padding: 14px 16px; background: rgba(42,157,143,0.05); }
+.se-title { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; color: var(--G); text-transform: uppercase; margin-bottom: 10px; }
+.se-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.se-btns { display: flex; gap: 8px; }
+.se-status { flex: 1; padding: 9px 0; border: 1.5px solid var(--rule); border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; background: var(--paper); color: var(--ink3); letter-spacing: 0.5px; }
+.se-status.active { border-color: var(--G); color: var(--G); background: rgba(42,157,143,0.1); }
+.se-save { flex: 1.5; padding: 9px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--G); color: #fff; }
+.se-save:active { opacity: 0.8; }
 .pf-dash { font-family: 'Archivo Black', sans-serif; font-size: 20px; color: var(--ink3); }
 
 .chip-row {
@@ -490,7 +498,7 @@ html, body { height: 100%; background: var(--paper); color: var(--ink); font-fam
       <span class="header-title">WC26 ⚽</span>
       <button class="info-btn" onclick="openRules()" title="How scoring works">?</button>
     </div>
-    <span id="fetch-status" style="font-size:10px;color:var(--ink3);letter-spacing:1px;"></span>
+
     <div class="header-user" onclick="logout()" id="header-user">
       <div class="p-avatar" id="hu-avatar"></div>
       <span id="hu-name"></span>
@@ -672,7 +680,7 @@ const FX = [
 // ═══════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════
-let user = null, tab = 'fx', openFx = null, dbData = {}, steppers = {};
+let user = null, tab = 'fx', openFx = null, dbData = {}, steppers = {}, scoreSteppers = {};
 
 // ═══════════════════════════════════════
 //  FIREBASE
@@ -718,7 +726,6 @@ function login(name) {
   document.getElementById('hu-name').textContent = name;
   subscribe();
   switchTab('fx');
-  startScoreFetching();
   // Re-render periodically so a match that kicks off locks its form promptly,
   // even if no other event (score update, tab switch) fires.
   clearInterval(lockTimer);
@@ -726,8 +733,7 @@ function login(name) {
 }
 let lockTimer = null;
 function logout() {
-  user = null; openFx = null; steppers = {};
-  clearTimeout(fetchTimer);
+  user = null; openFx = null; steppers = {}; scoreSteppers = {};
   clearInterval(lockTimer);
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login').style.display = 'flex';
@@ -955,7 +961,35 @@ function renderFxCard(f, isNext) {
         </div>
       </div>`;
     }
-    body = `<div class="fx-body">${prows}${form}</div>`;
+    // Guru-only score editor
+    let scoreEditor = '';
+    if (user === 'Guru') {
+      const ss = scoreSteppers[f.id] || {h: actual?.h??0, a: actual?.a??0, live: false};
+      scoreEditor = `<div class="score-editor">
+        <div class="se-title">Set Score</div>
+        <div class="se-row">
+          <span class="pf-team-name">${f.h}</span>
+          <div class="stepper">
+            <button class="st-btn" onclick="ssStep('${f.id}','h',-1)">−</button>
+            <span class="st-val" id="ss-${f.id}-h">${ss.h}</span>
+            <button class="st-btn" onclick="ssStep('${f.id}','h',1)">+</button>
+          </div>
+          <span class="pf-dash">–</span>
+          <div class="stepper">
+            <button class="st-btn" onclick="ssStep('${f.id}','a',-1)">−</button>
+            <span class="st-val" id="ss-${f.id}-a">${ss.a}</span>
+            <button class="st-btn" onclick="ssStep('${f.id}','a',1)">+</button>
+          </div>
+          <span class="pf-team-name right">${f.a}</span>
+        </div>
+        <div class="se-btns">
+          <button class="se-status ${ss.live?'active':''}" onclick="ssLive('${f.id}',true)">LIVE</button>
+          <button class="se-status ${!ss.live?'active':''}" onclick="ssLive('${f.id}',false)">FINAL</button>
+          <button class="se-save" onclick="ssSave('${f.id}')">Save ✓</button>
+        </div>
+      </div>`;
+    }
+    body = `<div class="fx-body">${prows}${scoreEditor}${form}</div>`;
   } else {
     body = `<div class="fx-body"></div>`;
   }
@@ -996,6 +1030,9 @@ function toggleFx(id) {
   if (openFx) {
     const pr = (dbData.predictions||{})[id]?.[user];
     if (!steppers[id]) steppers[id]={h:pr?.h??0,a:pr?.a??0,chipped:pr?.chipped??false};
+    // Always reset score stepper to current actual score when card opens
+    const actual = (dbData.scores||{})[id];
+    scoreSteppers[id] = {h: actual?.h??0, a: actual?.a??0, live: actual?.status==='IN_PLAY'||actual?.status==='LIVE'||actual?.status==='PAUSED'};
   }
   render();
   if (openFx) setTimeout(()=>{ const el=document.getElementById(`fc-${openFx}`); if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'}); },80);
@@ -1063,205 +1100,41 @@ function render() {
 }
 
 // ═══════════════════════════════════════
-//  AUTO SCORE FETCH  (football-data.org)
+//  GURU SCORE ENTRY
 // ═══════════════════════════════════════
-const FDORG_TOKEN = '5d6ab1203ca84b03a93d2eb9c847ea6c';
-const FDORG_URL   = 'https://api.football-data.org/v4/competitions/WC/matches';
-
-// football-data.org does not send CORS headers, so a direct browser fetch is
-// blocked. Route through a CORS proxy (which forwards our X-Auth-Token). The
-// proxy is tried first; a direct call is kept as a fallback for the day this
-// runs behind a server-side proxy instead.
-const FDORG_PROXIES = [
-  url => 'https://corsproxy.io/?url=' + encodeURIComponent(url),
-  url => url,
-];
-async function fetchFDORG(url, headers) {
-  let lastErr;
-  // Tell the proxy not to serve a cached response
-  const headersNoCa = { ...headers, 'Pragma': 'no-cache', 'Cache-Control': 'no-cache' };
-  for (const build of FDORG_PROXIES) {
-    try {
-      const res = await fetch(build(url), { headers: headersNoCa });
-      if (res.ok) return res;
-      lastErr = new Error('HTTP ' + res.status + ' ' + res.statusText);
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr || new Error('all proxies failed');
+function ssStep(fid, side, d) {
+  if (!scoreSteppers[fid]) return;
+  scoreSteppers[fid][side] = Math.max(0, scoreSteppers[fid][side] + d);
+  const el = document.getElementById(`ss-${fid}-${side}`);
+  if (el) el.textContent = scoreSteppers[fid][side];
 }
 
-// Map football-data.org team names → our fixture team names
-// (API uses full official names, we use shorthand)
-const TEAM_MAP = {
-  'Mexico':                    'Mexico',
-  'South Africa':              'South Africa',
-  'Korea Republic':            'South Korea',
-  'South Korea':               'South Korea',
-  'Czechia':                   'Czechia',
-  'Czech Republic':            'Czechia',
-  'Canada':                    'Canada',
-  'Bosnia and Herzegovina':    'Bosnia & Herz.',
-  'Paraguay':                  'Paraguay',
-  'United States':             'USA',
-  'Qatar':                     'Qatar',
-  'Switzerland':               'Switzerland',
-  'Brazil':                    'Brazil',
-  'Morocco':                   'Morocco',
-  'Haiti':                     'Haiti',
-  'Scotland':                  'Scotland',
-  'Australia':                 'Australia',
-  'Turkey':                    'Türkiye',
-  'Türkiye':                   'Türkiye',
-  'Germany':                   'Germany',
-  'Curaçao':                   'Curaçao',
-  'Curacao':                   'Curaçao',
-  'Netherlands':               'Netherlands',
-  'Japan':                     'Japan',
-  "Côte d'Ivoire":             'Ivory Coast',
-  'Ivory Coast':               'Ivory Coast',
-  'Ecuador':                   'Ecuador',
-  'Tunisia':                   'Tunisia',
-  'Sweden':                    'Sweden',
-  'Spain':                     'Spain',
-  'Cape Verde':                'Cape Verde',
-  'Belgium':                   'Belgium',
-  'Egypt':                     'Egypt',
-  'Saudi Arabia':              'Saudi Arabia',
-  'Uruguay':                   'Uruguay',
-  'IR Iran':                   'Iran',
-  'Iran':                      'Iran',
-  'New Zealand':               'New Zealand',
-  'France':                    'France',
-  'Senegal':                   'Senegal',
-  'Norway':                    'Norway',
-  'Iraq':                      'Iraq',
-  'Argentina':                 'Argentina',
-  'Algeria':                   'Algeria',
-  'Austria':                   'Austria',
-  'Jordan':                    'Jordan',
-  'Portugal':                  'Portugal',
-  'DR Congo':                  'DR Congo',
-  'Democratic Republic of Congo': 'DR Congo',
-  'England':                   'England',
-  'Croatia':                   'Croatia',
-  'Ghana':                     'Ghana',
-  'Panama':                    'Panama',
-  'Uzbekistan':                'Uzbekistan',
-  'Colombia':                  'Colombia',
-  // football-data.org spellings that differ from our fixture names
-  'Bosnia-Herzegovina':        'Bosnia & Herz.',
-  'Cape Verde Islands':        'Cape Verde',
-  'Congo DR':                  'DR Congo',
-};
-
-function normTeam(name) {
-  const n = TEAM_MAP[name] || name;
-  // Normalize Unicode (NFC) so accented names like "Curaçao" match regardless
-  // of how the API vs our source encode the accent.
-  return n.normalize ? n.normalize('NFC') : n;
+function ssLive(fid, live) {
+  if (!scoreSteppers[fid]) return;
+  scoreSteppers[fid].live = live;
+  render();
 }
 
-// Build lookup: "HomeTeam|AwayTeam" → fixture id (keys normalized to match normTeam)
-const FX_LOOKUP = {};
-for (const f of FX) {
-  FX_LOOKUP[`${normTeam(f.h)}|${normTeam(f.a)}`] = f.id;
-}
-
-function findFixtureId(apiHome, apiAway) {
-  const h = normTeam(apiHome), a = normTeam(apiAway);
-  return FX_LOOKUP[`${h}|${a}`] || FX_LOOKUP[`${a}|${h}`] || null;
-  // Note: if reversed, scores will be stored as-is from API (home|away always from API)
-}
-
-let fetchTimer = null;
-let lastFetchedAt = 0;
-
-async function fetchScores() {
-  try {
-    // Append a unique timestamp so corsproxy.io never serves a stale cached response
-    const bustUrl = FDORG_URL + '?_t=' + Date.now();
-    const res = await fetchFDORG(bustUrl, { 'X-Auth-Token': FDORG_TOKEN });
-    if (!res.ok) {
-      console.warn('Score fetch failed:', res.status, res.statusText);
+async function ssSave(fid) {
+  if (user !== 'Guru') return;
+  const ss = scoreSteppers[fid];
+  if (!ss) return;
+  const score = { h: ss.h, a: ss.a, status: ss.live ? 'IN_PLAY' : 'FINISHED' };
+  fbReady(async () => {
+    if (!window._db) {
+      if (!dbData.scores) dbData.scores = {};
+      dbData.scores[fid] = score;
+      render();
+      showToast('Score saved ✓');
       return;
     }
-    const data = await res.json();
-    const matches = data.matches || [];
-
-    let hasLive = false;
-    const updates = {};
-
-    for (const m of matches) {
-      const apiHome = m.homeTeam?.name || m.homeTeam?.shortName;
-      const apiAway = m.awayTeam?.name || m.awayTeam?.shortName;
-      if (!apiHome || !apiAway) continue;
-
-      const fid = findFixtureId(apiHome, apiAway);
-      if (!fid) continue;
-
-      const st = m.status; // SCHEDULED, LIVE, IN_PLAY, PAUSED, FINISHED, POSTPONED
-      if (st === 'IN_PLAY' || st === 'PAUSED' || st === 'LIVE') hasLive = true;
-
-      if (st === 'IN_PLAY' || st === 'PAUSED' || st === 'LIVE' || st === 'FINISHED') {
-        const h = m.score?.fullTime?.home ?? m.score?.halfTime?.home ?? null;
-        const a = m.score?.fullTime?.away ?? m.score?.halfTime?.away ?? null;
-        if (h !== null && a !== null) {
-          // Check if API home matches our fixture home (might be reversed)
-          const normH = normTeam(apiHome);
-          const fx = FX.find(f => f.id === fid);
-          let scoreH = h, scoreA = a;
-          if (fx && normH !== fx.h) { scoreH = a; scoreA = h; } // reversed
-          updates[fid] = { h: scoreH, a: scoreA, status: st };
-        }
-      }
+    try {
+      await window._dbSet(window._dbRef(window._db, `scores/${fid}`), score);
+      showToast('Score saved ✓');
+    } catch(e) {
+      showToast('Save failed — check connection');
     }
-
-    // Write all score updates to Firebase (only if changed)
-    fbReady(async () => {
-      if (!window._db) {
-        // Offline mode — update local state only
-        if (!dbData.scores) dbData.scores = {};
-        for (const [fid, sc] of Object.entries(updates)) {
-          dbData.scores[fid] = sc;
-        }
-        render();
-        return;
-      }
-      for (const [fid, sc] of Object.entries(updates)) {
-        const existing = (dbData.scores||{})[fid];
-        if (!existing || existing.h !== sc.h || existing.a !== sc.a || existing.status !== sc.status) {
-          await window._dbSet(window._dbRef(window._db, `scores/${fid}`), sc);
-          // Firebase onValue will trigger re-render automatically
-        }
-      }
-    });
-
-    lastFetchedAt = Date.now();
-
-    // Schedule next fetch: 30s if live match, 60s otherwise
-    clearTimeout(fetchTimer);
-    fetchTimer = setTimeout(fetchScores, hasLive ? 30000 : 60000);
-
-    updateFetchIndicator(hasLive);
-  } catch (err) {
-    console.error('Score fetch error:', err);
-    // Retry in 90s on error
-    clearTimeout(fetchTimer);
-    fetchTimer = setTimeout(fetchScores, 90000);
-  }
-}
-
-function updateFetchIndicator(isLive) {
-  const el = document.getElementById('fetch-status');
-  if (!el) return;
-  const t = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true,timeZone:'Asia/Kolkata'});
-  el.textContent = isLive ? `🟢 LIVE · updated ${t}` : `⚪ updated ${t}`;
-}
-
-// Start fetching once user logs in (called from login())
-function startScoreFetching() {
-  clearTimeout(fetchTimer);
-  fetchScores(); // immediate first fetch
+  });
 }
 </script>
 </body>
