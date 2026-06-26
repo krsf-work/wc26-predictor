@@ -699,6 +699,11 @@ const FLAGS = {
   'Ghana':'🇬🇭','Panama':'🇵🇦','Iran':'🇮🇷','New Zealand':'🇳🇿',
 };
 function flag(name) { return FLAGS[name] || ''; }
+const ALL_TEAMS = Object.keys(FLAGS).sort();
+function teamOptions(selected) {
+  return '<option value="TBD">— pick team —</option>' +
+    ALL_TEAMS.map(t => `<option value="${t}"${t===selected?' selected':''}>${flag(t)} ${t}</option>`).join('');
+}
 
 // ── Knockout fixtures ──────────────────────────────────────────────────────
 const KO = [
@@ -1057,14 +1062,8 @@ function renderFxCard(f, isNext) {
     let scoreEditor = '';
     if (user === 'Guru') {
       const ss = scoreSteppers[f.id] || {h: actual?.h??0, a: actual?.a??0, live: false};
-      const teamInputs = isKO ? `<div class="se-team-inputs">
-          <input class="se-team-input" id="ss-${f.id}-hname" type="text" value="${teamH}" placeholder="Home team">
-          <span class="se-team-vs">vs</span>
-          <input class="se-team-input" id="ss-${f.id}-aname" type="text" value="${teamA}" placeholder="Away team">
-        </div>` : '';
       scoreEditor = `<div class="score-editor">
-        <div class="se-title">${isKO ? 'Set Teams &amp; Score' : 'Set Score'}</div>
-        ${teamInputs}
+        <div class="se-title">Set Score</div>
         <div class="se-row">
           <span class="pf-team-name">${flag(teamH)}${teamH}</span>
           <div class="stepper">
@@ -1219,28 +1218,16 @@ async function ssSave(fid) {
   const ss = scoreSteppers[fid];
   if (!ss) return;
   const score = { h: ss.h, a: ss.a, status: ss.live ? 'IN_PLAY' : 'FINISHED' };
-  const isKO = KO.some(f => f.id === fid);
   fbReady(async () => {
     if (!window._db) {
       if (!dbData.scores) dbData.scores = {};
       dbData.scores[fid] = score;
-      if (isKO) {
-        if (!dbData.koTeams) dbData.koTeams = {};
-        const hname = document.getElementById(`ss-${fid}-hname`)?.value || 'TBD';
-        const aname = document.getElementById(`ss-${fid}-aname`)?.value || 'TBD';
-        dbData.koTeams[fid] = {h: hname, a: aname};
-      }
       render();
       showToast('Saved ✓');
       return;
     }
     try {
       await window._dbSet(window._dbRef(window._db, `scores/${fid}`), score);
-      if (isKO) {
-        const hname = document.getElementById(`ss-${fid}-hname`)?.value || 'TBD';
-        const aname = document.getElementById(`ss-${fid}-aname`)?.value || 'TBD';
-        await window._dbSet(window._dbRef(window._db, `koTeams/${fid}`), {h: hname, a: aname});
-      }
       showToast('Saved ✓');
     } catch(e) {
       showToast('Save failed — check connection');

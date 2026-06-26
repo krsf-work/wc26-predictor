@@ -116,6 +116,24 @@ function findFid(apiHome, apiAway) {
   return null;
 }
 
+// Knockout stage prefix config
+const KO_PREFIX = {
+  'ROUND_OF_32':    { prefix: 'R32', pad: 2, singleton: false },
+  'ROUND_OF_16':    { prefix: 'R16', pad: 0, singleton: false },
+  'QUARTER_FINALS': { prefix: 'QF',  pad: 0, singleton: false },
+  'SEMI_FINALS':    { prefix: 'SF',  pad: 0, singleton: false },
+  'THIRD_PLACE':    { prefix: 'TP',  pad: 0, singleton: true  },
+  'FINAL':          { prefix: 'FIN', pad: 0, singleton: true  },
+};
+
+async function fbPut(path, body) {
+  const r = await fetch(`${FIREBASE_DB}/${path}.json`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  if (!r.ok) console.error(`  ✗ Firebase ${path} failed (${r.status})`);
+  return r.ok;
+}
+
 async function main() {
   console.log('Fetching WC26 matches from football-data.org...');
   const res = await fetch('https://api.football-data.org/v4/competitions/WC/matches', {
@@ -128,9 +146,11 @@ async function main() {
   }
 
   const { matches } = await res.json();
-  let updated = 0, skipped = 0;
+  let updated = 0, skipped = 0, koTeams = 0, koScores = 0;
 
+  // ── Group stage ────────────────────────────────────────────────────────
   for (const m of matches) {
+    if (m.stage !== 'GROUP_STAGE') continue;
     const st = m.status;
     if (!['IN_PLAY', 'PAUSED', 'LIVE', 'FINISHED'].includes(st)) continue;
 
@@ -139,40 +159,66 @@ async function main() {
     if (!apiHome || !apiAway) continue;
 
     const found = findFid(apiHome, apiAway);
-    if (!found) {
-      console.warn(`  ⚠ No fixture ID for: "${apiHome}" vs "${apiAway}"`);
-      skipped++;
-      continue;
-    }
+    if (!found) { console.warn(`  ⚠ No fixture for: "${apiHome}" vs "${apiAway}"`); skipped++; continue; }
     const { fid, swap } = found;
 
     const apiH = m.score?.fullTime?.home;
     const apiA = m.score?.fullTime?.away;
-    if (apiH == null || apiA == null) {
-      // Live match with no fullTime score yet — skip rather than writing null
-      console.log(`  - ${fid}: ${apiHome} vs ${apiAway} [${st}] — score not yet available`);
-      continue;
-    }
-    // If API home/away order is reversed vs our fixture, swap scores so h=our home team
+    if (apiH == null || apiA == null) continue;
+
     const h = swap ? apiA : apiH;
     const a = swap ? apiH : apiA;
-
-    const score = { h, a, status: st };
-    const writeRes = await fetch(`${FIREBASE_DB}/scores/${fid}.json`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(score),
-    });
-
-    if (writeRes.ok) {
+    if (await fbPut(`scores/${fid}`, { h, a, status: st })) {
       console.log(`  ✓ ${fid}: ${apiHome} ${h}-${a} ${apiAway} [${st}]`);
       updated++;
-    } else {
-      console.error(`  ✗ ${fid}: Firebase write failed (${writeRes.status})`);
     }
   }
+  console.log(`Group stage: ${updated} updated, ${skipped} skipped.`);
 
-  console.log(`\nDone. Updated: ${updated}, skipped: ${skipped}`);
+  // ── Knockout stage ─────────────────────────────────────────────────────
+  const koByStage = {};
+  for (const m of matches) {
+    const cfg = KO_PREFIX[m.stage];
+    if (!cfg) continue;
+    if (!koByStage[m.stage]) koByStage[m.stage] = [];
+    koByStage[m.stage].push(m);
+  }
+
+  for (const [stage, cfg] of Object.entries(KO_PREFIX)) {
+    const list = (koByStage[stage] || []).sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i];
+      const fid = cfg.singleton ? cfg.prefix
+        : cfg.pad > 0 ? `${cfg.prefix}-${String(i + 1).padStart(cfg.pad, '0')}`
+        : `${cfg.prefix}-${i + 1}`;
+
+      const apiHome = m.homeTeam?.name || m.homeTeam?.shortName || '';
+      const apiAway = m.awayTeam?.name || m.awayTeam?.shortName || '';
+
+      // Write team names whenever known (not just when playing)
+      if (apiHome && apiAway && apiHome.trim() && apiAway.trim()) {
+        const h = norm(apiHome), a = norm(apiAway);
+        if (await fbPut(`koTeams/${fid}`, { h, a })) {
+          console.log(`  ✓ ${fid} teams: ${h} vs ${a}`);
+          koTeams++;
+        }
+      }
+
+      // Write score when available
+      const st = m.status;
+      if (['IN_PLAY', 'PAUSED', 'LIVE', 'FINISHED'].includes(st)) {
+        const h = m.score?.fullTime?.home;
+        const a = m.score?.fullTime?.away;
+        if (h != null && a != null) {
+          if (await fbPut(`scores/${fid}`, { h, a, status: st })) {
+            console.log(`  ✓ ${fid} score: ${h}-${a} [${st}]`);
+            koScores++;
+          }
+        }
+      }
+    }
+  }
+  console.log(`Knockout: ${koTeams} team slots, ${koScores} scores updated.`);
 }
 
 main().catch(err => { console.error('Fatal:', err); process.exit(1); });

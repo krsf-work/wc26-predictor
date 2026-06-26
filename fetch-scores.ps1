@@ -1,4 +1,4 @@
-﻿# WC26 Score Fetcher — runs automatically via Task Scheduler
+﻿# WC26 Score Fetcher
 $token  = '5d6ab1203ca84b03a93d2eb9c847ea6c'
 $fbBase = 'https://world-cup-score-predictor-default-rtdb.asia-southeast1.firebasedatabase.app'
 
@@ -75,13 +75,25 @@ function FindFid($h, $a) {
   return $null
 }
 
-Write-Host "Fetching WC26 scores..."
+# Knockout stage → ID prefix mapping
+$koPrefix = @{
+  'ROUND_OF_32'    = @{prefix='R32'; pad=2; singleton=$false}
+  'ROUND_OF_16'    = @{prefix='R16'; pad=0; singleton=$false}
+  'QUARTER_FINALS' = @{prefix='QF';  pad=0; singleton=$false}
+  'SEMI_FINALS'    = @{prefix='SF';  pad=0; singleton=$false}
+  'THIRD_PLACE'    = @{prefix='TP';  pad=0; singleton=$true}
+  'FINAL'          = @{prefix='FIN'; pad=0; singleton=$true}
+}
+
+Write-Host "Fetching WC26 matches..."
 $res = Invoke-WebRequest -Uri "https://api.football-data.org/v4/competitions/WC/matches" `
   -Headers @{ 'X-Auth-Token' = $token } -UseBasicParsing
 $matches = ($res.Content | ConvertFrom-Json).matches
 
+# ── Group stage scores ─────────────────────────────────────────────────────
 $updated = 0
 foreach ($m in $matches) {
+  if ($m.stage -ne 'GROUP_STAGE') { continue }
   $st = $m.status
   if ($st -notin @('IN_PLAY','PAUSED','LIVE','FINISHED')) { continue }
 
@@ -89,21 +101,70 @@ foreach ($m in $matches) {
   $apiA = if ($m.awayTeam.name) { $m.awayTeam.name } else { $m.awayTeam.shortName }
 
   $result = FindFid $apiH $apiA
-  if (-not $result) { Write-Warning "No match for: $apiH vs $apiA"; continue }
+  if (-not $result) { Write-Warning "No fixture for: $apiH vs $apiA"; continue }
   $fid = $result.id
 
   $scoreH = $m.score.fullTime.home
   $scoreA = $m.score.fullTime.away
   if ($null -eq $scoreH -or $null -eq $scoreA) { continue }
 
-  # If API home/away order is reversed vs our fixture, swap so h=our home team
   if ($result.swap) { $tmp = $scoreH; $scoreH = $scoreA; $scoreA = $tmp }
 
   $body = "{`"h`":$scoreH,`"a`":$scoreA,`"status`":`"$st`"}"
   Invoke-WebRequest -Uri "$fbBase/scores/$fid.json" -Method Put -Body $body `
     -ContentType 'application/json' -UseBasicParsing | Out-Null
-  Write-Host "  $fid : $($fixtures | Where-Object {$_.id -eq $fid} | ForEach-Object {$_.h}) $scoreH-$scoreA $($fixtures | Where-Object {$_.id -eq $fid} | ForEach-Object {$_.a}) [$st]"
+  Write-Host "  $fid : $scoreH-$scoreA [$st]"
   $updated++
 }
+Write-Host "Group stage: updated $updated scores."
 
-Write-Host "Done. Updated $updated scores."
+# ── Knockout stage teams + scores ──────────────────────────────────────────
+$koByStage = @{}
+foreach ($m in $matches) {
+  $stage = $m.stage
+  if (-not $koPrefix.ContainsKey($stage)) { continue }
+  if (-not $koByStage.ContainsKey($stage)) { $koByStage[$stage] = [System.Collections.Generic.List[object]]::new() }
+  $koByStage[$stage].Add($m)
+}
+
+$koUpdated = 0
+$koTeams = 0
+foreach ($stage in $koByStage.Keys) {
+  $cfg = $koPrefix[$stage]
+  $sorted = $koByStage[$stage] | Sort-Object { [datetime]$_.utcDate }
+  $idx = 0
+  foreach ($m in $sorted) {
+    $fid = if ($cfg.singleton) { $cfg.prefix } `
+           elseif ($cfg.pad -gt 0) { "$($cfg.prefix)-$($($idx+1).ToString().PadLeft($cfg.pad,'0'))" } `
+           else { "$($cfg.prefix)-$($idx+1)" }
+    $idx++
+
+    $apiH = if ($m.homeTeam.name) { $m.homeTeam.name } else { $m.homeTeam.shortName }
+    $apiA = if ($m.awayTeam.name) { $m.awayTeam.name } else { $m.awayTeam.shortName }
+
+    # Write team names when known (any status, not just live/finished)
+    if ($apiH -and $apiA -and $apiH -notmatch '^\s*$' -and $apiA -notmatch '^\s*$') {
+      $normH = Norm $apiH; $normA = Norm $apiA
+      $tb = "{`"h`":`"$normH`",`"a`":`"$normA`"}"
+      Invoke-WebRequest -Uri "$fbBase/koTeams/$fid.json" -Method Put -Body $tb `
+        -ContentType 'application/json' -UseBasicParsing | Out-Null
+      Write-Host "  $fid teams: $normH vs $normA"
+      $koTeams++
+    }
+
+    # Write score when available
+    $st = $m.status
+    if ($st -in @('IN_PLAY','PAUSED','LIVE','FINISHED')) {
+      $scoreH = $m.score.fullTime.home
+      $scoreA = $m.score.fullTime.away
+      if ($null -ne $scoreH -and $null -ne $scoreA) {
+        $body = "{`"h`":$scoreH,`"a`":$scoreA,`"status`":`"$st`"}"
+        Invoke-WebRequest -Uri "$fbBase/scores/$fid.json" -Method Put -Body $body `
+          -ContentType 'application/json' -UseBasicParsing | Out-Null
+        Write-Host "  $fid score: $scoreH-$scoreA [$st]"
+        $koUpdated++
+      }
+    }
+  }
+}
+Write-Host "Knockout: $koTeams team slots set, $koUpdated scores updated."
