@@ -341,6 +341,12 @@ html, body { height: 100%; background: var(--paper); color: var(--ink); font-fam
 .se-status.active { border-color: var(--G); color: var(--G); background: rgba(42,157,143,0.1); }
 .se-save { flex: 1.5; padding: 9px 0; border: none; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; background: var(--G); color: #fff; }
 .se-save:active { opacity: 0.8; }
+.ko-stage-header { margin: 24px 16px 4px; font-size: 11px; font-weight: 800; letter-spacing: 2px; color: var(--G); text-transform: uppercase; border-top: 2px solid var(--G); padding-top: 14px; }
+.fx-scorebox.tbd { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--ink3); }
+.se-team-inputs { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.se-team-input { flex: 1; padding: 8px 10px; border: 1.5px solid var(--rule); border-radius: 8px; font-size: 13px; font-weight: 600; background: var(--paper); color: var(--ink); outline: none; min-width: 0; }
+.se-team-input:focus { border-color: var(--G); }
+.se-team-vs { font-size: 11px; color: var(--ink3); font-weight: 700; flex-shrink: 0; }
 .pf-dash { font-family: 'Archivo Black', sans-serif; font-size: 20px; color: var(--ink3); }
 
 .chip-row {
@@ -677,6 +683,64 @@ const FX = [
   {id:'J6',g:'J',h:'Algeria',a:'Austria',ko:ist('2026-06-27',22),v:'Kansas City'},
 ];
 
+// ── Country flags ──────────────────────────────────────────────────────────
+const FLAGS = {
+  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czechia':'🇨🇿',
+  'Canada':'🇨🇦','Bosnia & Herz.':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
+  'Brazil':'🇧🇷','Morocco':'🇲🇦','Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+  'USA':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺','Türkiye':'🇹🇷',
+  'Germany':'🇩🇪','Curaçao':'🇨🇼','Ivory Coast':'🇨🇮','Ecuador':'🇪🇨',
+  'Netherlands':'🇳🇱','Japan':'🇯🇵','Tunisia':'🇹🇳','Sweden':'🇸🇪',
+  'Spain':'🇪🇸','Cape Verde':'🇨🇻','Belgium':'🇧🇪','Egypt':'🇪🇬',
+  'Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾','France':'🇫🇷','Senegal':'🇸🇳',
+  'Norway':'🇳🇴','Iraq':'🇮🇶','Argentina':'🇦🇷','Algeria':'🇩🇿',
+  'Austria':'🇦🇹','Jordan':'🇯🇴','Portugal':'🇵🇹','DR Congo':'🇨🇩',
+  'Uzbekistan':'🇺🇿','Colombia':'🇨🇴','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷',
+  'Ghana':'🇬🇭','Panama':'🇵🇦','Iran':'🇮🇷','New Zealand':'🇳🇿',
+};
+function flag(name) { return FLAGS[name] || ''; }
+
+// ── Knockout fixtures ──────────────────────────────────────────────────────
+const KO = [
+  // Round of 32
+  {id:'R32-01',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-06-29',14),v:'MetLife Stadium'},
+  {id:'R32-02',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-06-29',18),v:'SoFi Stadium'},
+  {id:'R32-03',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-06-29',21),v:'AT&T Stadium'},
+  {id:'R32-04',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-06-30',14),v:'Rose Bowl'},
+  {id:'R32-05',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-06-30',18),v:'Arrowhead Stadium'},
+  {id:'R32-06',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-06-30',21),v:'Levi\'s Stadium'},
+  {id:'R32-07',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-01',13),v:'Hard Rock Stadium'},
+  {id:'R32-08',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-01',16),v:'Gillette Stadium'},
+  {id:'R32-09',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-01',19),v:'Lincoln Financial'},
+  {id:'R32-10',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-01',22),v:'NRG Stadium'},
+  {id:'R32-11',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-02',14),v:'Mercedes-Benz Stadium'},
+  {id:'R32-12',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-02',18),v:'Lumen Field'},
+  {id:'R32-13',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-02',21),v:'BC Place'},
+  {id:'R32-14',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-03',14),v:'BMO Field'},
+  {id:'R32-15',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-03',18),v:'Estadio Akron'},
+  {id:'R32-16',round:'R32',roundLabel:'Round of 32',h:'TBD',a:'TBD',ko:ist('2026-07-03',21),v:'Estadio Azteca'},
+  // Round of 16
+  {id:'R16-1',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-05',14),v:'MetLife Stadium'},
+  {id:'R16-2',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-05',19),v:'SoFi Stadium'},
+  {id:'R16-3',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-06',14),v:'AT&T Stadium'},
+  {id:'R16-4',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-06',19),v:'Arrowhead Stadium'},
+  {id:'R16-5',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-07',14),v:'Mercedes-Benz Stadium'},
+  {id:'R16-6',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-07',19),v:'NRG Stadium'},
+  {id:'R16-7',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-08',14),v:'Hard Rock Stadium'},
+  {id:'R16-8',round:'R16',roundLabel:'Round of 16',h:'TBD',a:'TBD',ko:ist('2026-07-08',19),v:'Rose Bowl'},
+  // Quarter-Finals
+  {id:'QF-1',round:'QF',roundLabel:'Quarter-Final',h:'TBD',a:'TBD',ko:ist('2026-07-11',14),v:'MetLife Stadium'},
+  {id:'QF-2',round:'QF',roundLabel:'Quarter-Final',h:'TBD',a:'TBD',ko:ist('2026-07-11',19),v:'SoFi Stadium'},
+  {id:'QF-3',round:'QF',roundLabel:'Quarter-Final',h:'TBD',a:'TBD',ko:ist('2026-07-12',14),v:'AT&T Stadium'},
+  {id:'QF-4',round:'QF',roundLabel:'Quarter-Final',h:'TBD',a:'TBD',ko:ist('2026-07-12',19),v:'Arrowhead Stadium'},
+  // Semi-Finals
+  {id:'SF-1',round:'SF',roundLabel:'Semi-Final',h:'TBD',a:'TBD',ko:ist('2026-07-15',20),v:'MetLife Stadium'},
+  {id:'SF-2',round:'SF',roundLabel:'Semi-Final',h:'TBD',a:'TBD',ko:ist('2026-07-16',20),v:'AT&T Stadium'},
+  // Third Place + Final
+  {id:'TP',round:'TP',roundLabel:'Third Place',h:'TBD',a:'TBD',ko:ist('2026-07-18',20),v:'Hard Rock Stadium'},
+  {id:'FIN',round:'FIN',roundLabel:'⭐ Final',h:'TBD',a:'TBD',ko:ist('2026-07-19',20),v:'MetLife Stadium'},
+];
+
 // ═══════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════
@@ -757,6 +821,9 @@ function switchTab(t) {
 // ═══════════════════════════════════════
 const now = () => new Date();
 function status(f) {
+  const sc = (dbData.scores||{})[f.id];
+  if (sc?.status==='FINISHED') return 'done';
+  if (sc?.status==='IN_PLAY'||sc?.status==='LIVE'||sc?.status==='PAUSED') return 'live';
   const ko = new Date(f.ko), end = new Date(ko.getTime()+105*60000), n=now();
   return n < ko ? 'up' : n < end ? 'live' : 'done';
 }
@@ -774,7 +841,7 @@ function chipsUsed(name) {
 }
 function playerStats(name) {
   let pts=0,exact=0,correct=0,neg=0,played=0;
-  for (const f of FX) {
+  for (const f of [...FX, ...KO]) {
     const sc = (dbData.scores||{})[f.id]; if (!sc||sc.h==null) continue;
     const pr = (dbData.predictions||{})[f.id]?.[name]; if (!pr) continue;
     played++;
@@ -816,10 +883,11 @@ function renderLB() {
   });
   podium += '</div>';
 
+  const total = FX.length + KO.length;
   const statsRow = `<div class="lb-stats-row">
-    <div class="lb-stat"><div class="lb-stat-val">${FX.length}</div><div class="lb-stat-label">Matches</div></div>
+    <div class="lb-stat"><div class="lb-stat-val">${total}</div><div class="lb-stat-label">Matches</div></div>
     <div class="lb-stat"><div class="lb-stat-val">${played}</div><div class="lb-stat-label">Played</div></div>
-    <div class="lb-stat"><div class="lb-stat-val">${FX.length-played}</div><div class="lb-stat-label">Left</div></div>
+    <div class="lb-stat"><div class="lb-stat-val">${total-played}</div><div class="lb-stat-label">Left</div></div>
   </div>`;
 
   let detail = '<div class="detail-table">';
@@ -850,6 +918,7 @@ function renderLB() {
 //  RENDER FIXTURES
 // ═══════════════════════════════════════
 function renderFX() {
+  // Group-stage: group by date
   const groups = {};
   for (const f of FX) {
     const dk = dateKey(f.ko);
@@ -858,13 +927,26 @@ function renderFX() {
   }
 
   let nextId = null;
-  for (const f of FX) { if (status(f)==='up') { nextId=f.id; break; } }
+  for (const f of [...FX, ...KO]) { if (status(f)==='up') { nextId=f.id; break; } }
 
   let html = '';
   for (const [, grp] of Object.entries(groups)) {
     html += `<div class="date-strip">${grp.label}</div>`;
     for (const f of grp.items) html += renderFxCard(f, f.id===nextId);
   }
+
+  // Knockout stage: group by round
+  const koRounds = {};
+  for (const f of KO) {
+    if (!koRounds[f.round]) koRounds[f.round] = { label: f.roundLabel, items:[] };
+    koRounds[f.round].items.push(f);
+  }
+  html += `<div class="ko-stage-header">KNOCKOUT STAGE</div>`;
+  for (const [, rnd] of Object.entries(koRounds)) {
+    html += `<div class="date-strip">${rnd.label}</div>`;
+    for (const f of rnd.items) html += renderFxCard(f, f.id===nextId);
+  }
+
   document.getElementById('view-fx').innerHTML = html;
 }
 
@@ -874,12 +956,22 @@ function renderFxCard(f, isNext) {
   const preds  = (dbData.predictions||{})[f.id] || {};
   const isOpen = openFx === f.id;
 
+  // KO: team names may be set by Guru in Firebase
+  const isKO = !!f.round;
+  const koNames = isKO ? (dbData.koTeams||{})[f.id] : null;
+  const teamH = koNames?.h || f.h;
+  const teamA = koNames?.a || f.a;
+  const teamsKnown = !isKO || (teamH !== 'TBD' && teamA !== 'TBD');
+  const metaLabel = isKO ? `${f.roundLabel} · ${f.v}` : `Group ${f.g} · ${f.v}`;
+
   // Score box
   let scoreHtml;
   if (st==='done' && actual?.h!=null) {
     scoreHtml = `<div class="fx-scorebox">${actual.h}–${actual.a}</div>`;
   } else if (st==='live' && actual?.h!=null) {
     scoreHtml = `<div class="fx-scorebox live-score">${actual.h}–${actual.a}</div>`;
+  } else if (!teamsKnown) {
+    scoreHtml = `<div class="fx-scorebox vs tbd">TBD</div>`;
   } else {
     scoreHtml = `<div class="fx-scorebox vs">vs</div>`;
   }
@@ -926,7 +1018,7 @@ function renderFxCard(f, isNext) {
 
     // Form
     let form = '';
-    if (st==='up') {
+    if (st==='up' && teamsKnown) {
       const si = steppers[f.id] || (()=>{ const pr=preds[user]; return steppers[f.id]={h:pr?.h??0,a:pr?.a??0,chipped:pr?.chipped??false}; })();
       const cu=chipsUsed(user), cl=2-cu-(si.chipped&&!preds[user]?.chipped?1:0);
       const chipUsable = si.chipped || cu < 2;
@@ -935,7 +1027,7 @@ function renderFxCard(f, isNext) {
         <div class="pf-title">Your Prediction</div>
         <div class="pf-body">
           <div class="pf-teams-row">
-            <span class="pf-team-name">${f.h}</span>
+            <span class="pf-team-name">${flag(teamH)}${teamH}</span>
             <div class="stepper">
               <button class="st-btn" onclick="st('${f.id}','h',-1)">−</button>
               <span class="st-val" id="sv-${f.id}-h">${si.h}</span>
@@ -947,7 +1039,7 @@ function renderFxCard(f, isNext) {
               <span class="st-val" id="sv-${f.id}-a">${si.a}</span>
               <button class="st-btn" onclick="st('${f.id}','a',1)">+</button>
             </div>
-            <span class="pf-team-name right">${f.a}</span>
+            <span class="pf-team-name right">${teamA}${flag(teamA)?'&nbsp;'+flag(teamA):''}</span>
           </div>
           <div class="chip-row ${si.chipped?'on':''} ${!chipUsable?'off':''}" onclick="${chipUsable?`toggleChip('${f.id}')`:''}" id="cr-${f.id}">
             <span class="chip-row-icon">🃏</span>
@@ -965,10 +1057,16 @@ function renderFxCard(f, isNext) {
     let scoreEditor = '';
     if (user === 'Guru') {
       const ss = scoreSteppers[f.id] || {h: actual?.h??0, a: actual?.a??0, live: false};
+      const teamInputs = isKO ? `<div class="se-team-inputs">
+          <input class="se-team-input" id="ss-${f.id}-hname" type="text" value="${teamH}" placeholder="Home team">
+          <span class="se-team-vs">vs</span>
+          <input class="se-team-input" id="ss-${f.id}-aname" type="text" value="${teamA}" placeholder="Away team">
+        </div>` : '';
       scoreEditor = `<div class="score-editor">
-        <div class="se-title">Set Score</div>
+        <div class="se-title">${isKO ? 'Set Teams &amp; Score' : 'Set Score'}</div>
+        ${teamInputs}
         <div class="se-row">
-          <span class="pf-team-name">${f.h}</span>
+          <span class="pf-team-name">${flag(teamH)}${teamH}</span>
           <div class="stepper">
             <button class="st-btn" onclick="ssStep('${f.id}','h',-1)">−</button>
             <span class="st-val" id="ss-${f.id}-h">${ss.h}</span>
@@ -980,7 +1078,7 @@ function renderFxCard(f, isNext) {
             <span class="st-val" id="ss-${f.id}-a">${ss.a}</span>
             <button class="st-btn" onclick="ssStep('${f.id}','a',1)">+</button>
           </div>
-          <span class="pf-team-name right">${f.a}</span>
+          <span class="pf-team-name right">${teamA}${flag(teamA)?'&nbsp;'+flag(teamA):''}</span>
         </div>
         <div class="se-btns">
           <button class="se-status ${ss.live?'active':''}" onclick="ssLive('${f.id}',true)">LIVE</button>
@@ -1005,13 +1103,13 @@ function renderFxCard(f, isNext) {
   return `<div class="${cls}" id="fc-${f.id}">
     <div class="fx-header" onclick="toggleFx('${f.id}')">
       <div class="fx-meta">
-        <span class="fx-group">Group ${f.g} · ${f.v}</span>
+        <span class="fx-group">${metaLabel}</span>
         ${timeHtml}
       </div>
       <div class="fx-teams">
-        <span class="fx-team">${f.h}</span>
+        <span class="fx-team">${flag(teamH)}${teamH}</span>
         ${scoreHtml}
-        <span class="fx-team away">${f.a}</span>
+        <span class="fx-team away">${teamA}${flag(teamA)?'&nbsp;'+flag(teamA):''}</span>
       </div>
       <div class="fx-footer">
         <div class="pred-dots">${dots}</div>
@@ -1032,7 +1130,8 @@ function toggleFx(id) {
     if (!steppers[id]) steppers[id]={h:pr?.h??0,a:pr?.a??0,chipped:pr?.chipped??false};
     // Always reset score stepper to current actual score when card opens
     const actual = (dbData.scores||{})[id];
-    scoreSteppers[id] = {h: actual?.h??0, a: actual?.a??0, live: actual?.status==='IN_PLAY'||actual?.status==='LIVE'||actual?.status==='PAUSED'};
+    const koNames = (dbData.koTeams||{})[id];
+    scoreSteppers[id] = {h: actual?.h??0, a: actual?.a??0, live: actual?.status==='IN_PLAY'||actual?.status==='LIVE'||actual?.status==='PAUSED', hname: koNames?.h||'TBD', aname: koNames?.a||'TBD'};
   }
   render();
   if (openFx) setTimeout(()=>{ const el=document.getElementById(`fc-${openFx}`); if(el) el.scrollIntoView({behavior:'smooth',block:'nearest'}); },80);
@@ -1120,17 +1219,29 @@ async function ssSave(fid) {
   const ss = scoreSteppers[fid];
   if (!ss) return;
   const score = { h: ss.h, a: ss.a, status: ss.live ? 'IN_PLAY' : 'FINISHED' };
+  const isKO = KO.some(f => f.id === fid);
   fbReady(async () => {
     if (!window._db) {
       if (!dbData.scores) dbData.scores = {};
       dbData.scores[fid] = score;
+      if (isKO) {
+        if (!dbData.koTeams) dbData.koTeams = {};
+        const hname = document.getElementById(`ss-${fid}-hname`)?.value || 'TBD';
+        const aname = document.getElementById(`ss-${fid}-aname`)?.value || 'TBD';
+        dbData.koTeams[fid] = {h: hname, a: aname};
+      }
       render();
-      showToast('Score saved ✓');
+      showToast('Saved ✓');
       return;
     }
     try {
       await window._dbSet(window._dbRef(window._db, `scores/${fid}`), score);
-      showToast('Score saved ✓');
+      if (isKO) {
+        const hname = document.getElementById(`ss-${fid}-hname`)?.value || 'TBD';
+        const aname = document.getElementById(`ss-${fid}-aname`)?.value || 'TBD';
+        await window._dbSet(window._dbRef(window._db, `koTeams/${fid}`), {h: hname, a: aname});
+      }
+      showToast('Saved ✓');
     } catch(e) {
       showToast('Save failed — check connection');
     }
