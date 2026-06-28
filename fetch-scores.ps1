@@ -197,4 +197,18 @@ foreach ($stageDef in $espnStages) {
     }
   }
 }
+# Fallback: hard-code fixtures ESPN hasn't published yet (overwritten when ESPN has them)
+$espnFallback = @(
+  @{fid='R32-16'; h='South Africa'; a='Canada'}
+)
+$fbKoTeams = (Invoke-WebRequest -Uri "$fbBase/koTeams.json" -UseBasicParsing).Content | ConvertFrom-Json
+foreach ($fb2 in $espnFallback) {
+  if (-not ($fbKoTeams | Get-Member -Name $fb2.fid -MemberType NoteProperty)) {
+    $tb2 = "{`"h`":`"$($fb2.h)`",`"a`":`"$($fb2.a)`"}"
+    Invoke-WebRequest -Uri "$fbBase/koTeams/$($fb2.fid).json" -Method Put -Body $tb2 `
+      -ContentType 'application/json' -UseBasicParsing | Out-Null
+    Write-Host "  $($fb2.fid) fallback: $($fb2.h) vs $($fb2.a)"
+    $koTeams++
+  }
+}
 Write-Host "Knockout: $koTeams team slots set, $koUpdated scores updated."

@@ -243,6 +243,19 @@ async function main() {
       }
     }
   }
+  // Fallback: fixtures ESPN hasn't published yet (overwritten when ESPN has them)
+  const KO_FALLBACK = [
+    { fid: 'R32-16', h: 'South Africa', a: 'Canada' },
+  ];
+  const existingKo = await (await fetch(`${FIREBASE_DB}/koTeams.json`)).json() || {};
+  for (const fb of KO_FALLBACK) {
+    if (!existingKo[fb.fid]) {
+      if (await fbPut(`koTeams/${fb.fid}`, { h: fb.h, a: fb.a })) {
+        console.log(`  ✓ ${fb.fid} fallback: ${fb.h} vs ${fb.a}`);
+        koTeams++;
+      }
+    }
+  }
   console.log(`Knockout: ${koTeams} team slots, ${koScores} scores updated.`);
 }
 
