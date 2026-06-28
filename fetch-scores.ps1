@@ -152,11 +152,12 @@ foreach ($stage in $koByStage.Keys) {
       $koTeams++
     }
 
-    # Write score when available
+    # Write score when available; use ET score if match went to extra time
     $st = $m.status
     if ($st -in @('IN_PLAY','PAUSED','LIVE','FINISHED')) {
-      $scoreH = $m.score.fullTime.home
-      $scoreA = $m.score.fullTime.away
+      $dur = $m.score.duration
+      $scoreH = if ($dur -in @('EXTRA_TIME','PENALTY_SHOOTOUT') -and $null -ne $m.score.extraTime.home) { $m.score.extraTime.home } else { $m.score.fullTime.home }
+      $scoreA = if ($dur -in @('EXTRA_TIME','PENALTY_SHOOTOUT') -and $null -ne $m.score.extraTime.away) { $m.score.extraTime.away } else { $m.score.fullTime.away }
       if ($null -ne $scoreH -and $null -ne $scoreA) {
         $body = "{`"h`":$scoreH,`"a`":$scoreA,`"status`":`"$st`"}"
         Invoke-WebRequest -Uri "$fbBase/scores/$fid.json" -Method Put -Body $body `

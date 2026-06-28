@@ -204,11 +204,13 @@ async function main() {
         }
       }
 
-      // Write score when available
+      // Write score when available; use ET score if match went to extra time
       const st = m.status;
       if (['IN_PLAY', 'PAUSED', 'LIVE', 'FINISHED'].includes(st)) {
-        const h = m.score?.fullTime?.home;
-        const a = m.score?.fullTime?.away;
+        const dur = m.score?.duration;
+        const useET = dur === 'EXTRA_TIME' || dur === 'PENALTY_SHOOTOUT';
+        const h = (useET ? m.score?.extraTime?.home : null) ?? m.score?.fullTime?.home;
+        const a = (useET ? m.score?.extraTime?.away : null) ?? m.score?.fullTime?.away;
         if (h != null && a != null) {
           if (await fbPut(`scores/${fid}`, { h, a, status: st })) {
             console.log(`  ✓ ${fid} score: ${h}-${a} [${st}]`);

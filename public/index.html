@@ -180,6 +180,26 @@ html, body { height: 100%; background: var(--paper); color: var(--ink); font-fam
 
 /* ─── LEADERBOARD ─── */
 .lb-wrap { padding: 20px 16px; }
+
+/* ── Final Picks ── */
+.fp-section { background: var(--card); border-radius: 16px; border: 1px solid var(--border); padding: 16px; margin-bottom: 20px; }
+.fp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.fp-title { font-family: 'Archivo Black', sans-serif; font-size: 15px; }
+.fp-lock-badge { font-size: 11px; font-weight: 600; color: var(--ink3); background: var(--bg); border-radius: 20px; padding: 3px 10px; border: 1px solid var(--border); }
+.fp-lock-badge.open { color: var(--green); border-color: var(--green); }
+.fp-rule { font-size: 11px; color: var(--ink3); margin-bottom: 14px; }
+.fp-cards { display: flex; gap: 10px; }
+.fp-card { flex: 1; border: 1px solid var(--border); border-radius: 12px; padding: 12px 8px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fp-card.me { border-color: var(--accent); background: linear-gradient(160deg, #f5f0ff, #fff); }
+.fp-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Archivo Black', sans-serif; font-size: 15px; }
+.fp-name { font-size: 12px; font-weight: 700; color: var(--ink2); }
+.fp-body { width: 100%; display: flex; flex-direction: column; gap: 5px; align-items: center; }
+.fp-pick-row { font-size: 13px; display: flex; align-items: center; gap: 5px; font-weight: 600; }
+.fp-bonus { font-size: 13px; font-weight: 700; color: var(--green); margin-top: 2px; }
+.fp-pending { font-size: 11px; color: var(--ink3); font-style: italic; }
+.fp-sel { width: 100%; font-size: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 5px 4px; background: var(--bg); color: var(--ink); margin-bottom: 2px; }
+.fp-save-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 2px; }
+
 .section-eyebrow {
   font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
   color: var(--ink3); margin-bottom: 16px; font-weight: 600;
@@ -746,6 +766,10 @@ const KO = [
   {id:'FIN',round:'FIN',roundLabel:'⭐ Final',h:'TBD',a:'TBD',ko:ist('2026-07-19',20),v:'MetLife Stadium'},
 ];
 
+// Final picks lock: midnight IST Jun 28/29 = 18:30 UTC Jun 28
+const FINAL_DEADLINE = new Date('2026-06-28T18:30:00Z');
+function finalPicksLocked() { return new Date() >= FINAL_DEADLINE; }
+
 // ═══════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════
@@ -779,6 +803,25 @@ function saveP(mid, pred) {
       showToast('Save failed — check connection');
       console.error('saveP error:', e);
     }
+  });
+}
+
+function saveFinalPicks() {
+  if (finalPicksLocked()) { showToast('🔒 Final picks locked!'); return; }
+  const t1 = document.getElementById('fp-t1')?.value;
+  const t2 = document.getElementById('fp-t2')?.value;
+  if (!t1 || t1 === 'TBD' || !t2 || t2 === 'TBD') { showToast('Pick both teams first'); return; }
+  if (t1 === t2) { showToast('Pick 2 different teams'); return; }
+  fbReady(async () => {
+    if (!window._db) {
+      if (!dbData.finalPicks) dbData.finalPicks = {};
+      dbData.finalPicks[user] = {t1, t2};
+      render(); showToast('Final picks saved ✓'); return;
+    }
+    try {
+      await window._dbSet(window._dbRef(window._db, `finalPicks/${user}`), {t1, t2});
+      showToast('Final picks saved ✓');
+    } catch(e) { showToast('Save failed — check connection'); }
   });
 }
 
@@ -844,6 +887,22 @@ function dateKey(iso) {
 function chipsUsed(name) {
   return Object.values(dbData.predictions||{}).filter(m => m[name]?.chipped).length;
 }
+function calcFinalPickPts(name) {
+  const sc = (dbData.scores||{})['FIN'];
+  if (!sc || sc.h == null) return 0;
+  const picks = (dbData.finalPicks||{})[name];
+  if (!picks || !picks.t1 || !picks.t2) return 0;
+  const koTeams = (dbData.koTeams||{})['FIN'];
+  if (!koTeams || !koTeams.h || !koTeams.a) return 0;
+  // fullTime score determines winner (120-min rule: ET/PSO score is what's stored)
+  const winner = sc.h > sc.a ? koTeams.h : koTeams.a;
+  const loser  = sc.h > sc.a ? koTeams.a : koTeams.h;
+  let p = 0;
+  if (picks.t1 === winner || picks.t2 === winner) p += 50;
+  if (picks.t1 === loser  || picks.t2 === loser)  p += 20;
+  return p;
+}
+
 function playerStats(name) {
   let pts=0,exact=0,correct=0,neg=0,played=0;
   for (const f of [...FX, ...KO]) {
@@ -856,6 +915,7 @@ function playerStats(name) {
     if (p>0) correct++;
     if (p<0) neg++;
   }
+  pts += calcFinalPickPts(name);
   return {pts,exact,correct,neg,played};
 }
 function ptsColor(p) {
@@ -863,6 +923,59 @@ function ptsColor(p) {
   if (p>0)     return 'var(--green)';
   if (p<0)     return 'var(--red)';
   return 'var(--ink3)';
+}
+
+// ═══════════════════════════════════════
+//  FINAL PICKS
+// ═══════════════════════════════════════
+function renderFinalPicks() {
+  const locked = finalPicksLocked();
+  const picks  = dbData.finalPicks || {};
+  const finSc  = (dbData.scores||{})['FIN'];
+  const finPlayed = finSc && finSc.h != null;
+
+  const deadlineStr = 'Lock: midnight IST Jun 28';
+  const lockBadge = locked
+    ? `<span class="fp-lock-badge">🔒 Locked</span>`
+    : `<span class="fp-lock-badge open">${deadlineStr}</span>`;
+
+  let cards = '';
+  for (const n of PNAMES) {
+    const p = PLAYERS[n], pk = picks[n], isMe = n === user;
+    const fpp = calcFinalPickPts(n);
+    // Show other players' picks only after deadline
+    const showPicks = pk && (locked || isMe);
+
+    let inner = '';
+    if (showPicks) {
+      inner = `<div class="fp-pick-row">${flag(pk.t1)} <span>${pk.t1}</span></div>
+               <div class="fp-pick-row">${flag(pk.t2)} <span>${pk.t2}</span></div>`;
+      if (finPlayed && fpp > 0) inner += `<div class="fp-bonus">+${fpp} pts</div>`;
+    } else if (isMe && !locked) {
+      inner = `<select id="fp-t1" class="fp-sel">${teamOptions(pk?.t1)}</select>
+               <select id="fp-t2" class="fp-sel">${teamOptions(pk?.t2)}</select>
+               <button class="fp-save-btn" onclick="saveFinalPicks()">Save</button>`;
+    } else if (locked && !pk) {
+      inner = `<div class="fp-pending">—</div>`;
+    } else {
+      inner = `<div class="fp-pending">Hidden until locked</div>`;
+    }
+
+    cards += `<div class="fp-card ${isMe?'me':''}">
+      <div class="fp-avatar" style="background:${p.bg};color:${p.color}">${p.initial}</div>
+      <div class="fp-name">${n}</div>
+      <div class="fp-body">${inner}</div>
+    </div>`;
+  }
+
+  return `<div class="fp-section">
+    <div class="fp-header">
+      <span class="fp-title">🏆 Final Pick</span>
+      ${lockBadge}
+    </div>
+    <div class="fp-rule">Winner +50 pts · Runner-up +20 pts · Pick 2 teams</div>
+    <div class="fp-cards">${cards}</div>
+  </div>`;
 }
 
 // ═══════════════════════════════════════
@@ -875,7 +988,7 @@ function renderLB() {
   let podium = '<div class="lb-podium">';
   rows.forEach((r,i)=>{
     const p=PLAYERS[r.n], cl=`rank-${i+1}`;
-    const cu=chipsUsed(r.n), chips='🃏'.repeat(2-cu)+'<span class="chip-dim">'+'🃏'.repeat(cu)+'</span>';
+    const cu=chipsUsed(r.n), chips='🃏'.repeat(4-cu)+'<span class="chip-dim">'+'🃏'.repeat(cu)+'</span>';
     const ptCol = r.pts<0?'var(--red)':r.pts>0?'var(--ink)':'var(--ink3)';
     podium += `<div class="lb-podium-card ${cl}">
       <div class="podium-rank">${['1st','2nd','3rd'][i]}</div>
@@ -912,6 +1025,7 @@ function renderLB() {
   detail += '</div>';
 
   document.getElementById('view-lb').innerHTML = `<div class="lb-wrap">
+    ${renderFinalPicks()}
     <div class="section-eyebrow">Standings</div>
     ${podium}${statsRow}
     <div class="section-eyebrow">Details</div>
@@ -1025,8 +1139,8 @@ function renderFxCard(f, isNext) {
     let form = '';
     if (st==='up' && teamsKnown) {
       const si = steppers[f.id] || (()=>{ const pr=preds[user]; return steppers[f.id]={h:pr?.h??0,a:pr?.a??0,chipped:pr?.chipped??false}; })();
-      const cu=chipsUsed(user), cl=2-cu-(si.chipped&&!preds[user]?.chipped?1:0);
-      const chipUsable = si.chipped || cu < 2;
+      const cu=chipsUsed(user), cl=4-cu-(si.chipped&&!preds[user]?.chipped?1:0);
+      const chipUsable = si.chipped || cu < 4;
       const hasPred = !!preds[user];
       form = `<div class="pred-form">
         <div class="pf-title">Your Prediction</div>
@@ -1050,7 +1164,7 @@ function renderFxCard(f, isNext) {
             <span class="chip-row-icon">🃏</span>
             <div class="chip-row-text">
               <strong>Double Chip</strong>
-              <small>${2-cu} chip${2-cu===1?'':'s'} remaining · doubles all points</small>
+              <small>${4-cu} chip${4-cu===1?'':'s'} remaining · doubles all points</small>
             </div>
             <div class="chip-toggle-ui"></div>
           </div>
@@ -1148,16 +1262,14 @@ function toggleChip(mid) {
   if (predLocked(mid)) { showToast('🔒 Match started — prediction locked'); render(); return; }
   if (!steppers[mid]) steppers[mid]={h:0,a:0,chipped:false};
   const cu=chipsUsed(user);
-  if (!steppers[mid].chipped && cu>=2) { showToast('No chips left!'); return; }
+  if (!steppers[mid].chipped && cu>=4) { showToast('No chips left!'); return; }
   steppers[mid].chipped = !steppers[mid].chipped;
   const cr=document.getElementById(`cr-${mid}`);
   if (cr) cr.classList.toggle('on', steppers[mid].chipped);
 }
 
-// A prediction is LOCKED the moment the match is no longer upcoming.
-// Time-based, so it holds even if a stale form is still in the DOM.
 function predLocked(mid) {
-  const f = FX.find(x => x.id === mid);
+  const f = [...FX, ...KO].find(x => x.id === mid);
   return !!(f && status(f) !== 'up');
 }
 
@@ -1165,7 +1277,7 @@ function submitP(mid) {
   if (predLocked(mid)) { showToast('🔒 Match started — prediction locked'); render(); return; }
   const si=steppers[mid]; if(!si) return;
   const cu=chipsUsed(user), existing=(dbData.predictions||{})[mid]?.[user];
-  if (si.chipped && !existing?.chipped && cu>=2) { showToast('No chips left!'); return; }
+  if (si.chipped && !existing?.chipped && cu>=4) { showToast('No chips left!'); return; }
   saveP(mid,{h:si.h,a:si.a,chipped:si.chipped});
 }
 
