@@ -1,4 +1,5 @@
 ﻿# WC26 Score Fetcher
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $token  = '5d6ab1203ca84b03a93d2eb9c847ea6c'
 $fbBase = 'https://world-cup-score-predictor-default-rtdb.asia-southeast1.firebasedatabase.app'
 
@@ -118,53 +119,81 @@ foreach ($m in $matches) {
 }
 Write-Host "Group stage: updated $updated scores."
 
-# ── Knockout stage teams + scores ──────────────────────────────────────────
-$koByStage = @{}
-foreach ($m in $matches) {
-  $stage = $m.stage
-  if (-not $koPrefix.ContainsKey($stage)) { continue }
-  if (-not $koByStage.ContainsKey($stage)) { $koByStage[$stage] = [System.Collections.Generic.List[object]]::new() }
-  $koByStage[$stage].Add($m)
+# ── Knockout stage — ESPN API (has teams before football-data.org does) ────
+$espnBase2 = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
+
+# Stage definitions: UTC date boundaries and ID format
+$espnStages = @(
+  @{prefix='R32'; pad=2; singleton=$false; start=[datetime]'2026-06-29T00:00:00Z'; end=[datetime]'2026-07-04T12:00:00Z'},
+  @{prefix='R16'; pad=0; singleton=$false; start=[datetime]'2026-07-04T12:00:00Z'; end=[datetime]'2026-07-09T00:00:00Z'},
+  @{prefix='QF';  pad=0; singleton=$false; start=[datetime]'2026-07-09T00:00:00Z'; end=[datetime]'2026-07-13T00:00:00Z'},
+  @{prefix='SF';  pad=0; singleton=$false; start=[datetime]'2026-07-13T00:00:00Z'; end=[datetime]'2026-07-17T12:00:00Z'},
+  @{prefix='TP';  pad=0; singleton=$true;  start=[datetime]'2026-07-17T12:00:00Z'; end=[datetime]'2026-07-19T12:00:00Z'},
+  @{prefix='FIN'; pad=0; singleton=$true;  start=[datetime]'2026-07-19T12:00:00Z'; end=[datetime]'2026-07-21T00:00:00Z'}
+)
+
+# Fetch all ESPN KO events once across the full date range
+$espnDates = @('20260629','20260630','20260701','20260702','20260703','20260704',
+               '20260705','20260706','20260707','20260708',
+               '20260711','20260712','20260715','20260716','20260718','20260719')
+$allEspnEvents = [System.Collections.Generic.List[object]]::new()
+$seenEventIds  = @{}
+foreach ($d in $espnDates) {
+  try {
+    $er = Invoke-WebRequest -Uri "${espnBase2}?dates=$d" -UseBasicParsing
+    $evs = ($er.Content | ConvertFrom-Json).events
+    foreach ($ev in $evs) {
+      if ($seenEventIds[$ev.id]) { continue }
+      $seenEventIds[$ev.id] = $true
+      $allEspnEvents.Add($ev)
+    }
+  } catch { Write-Warning "ESPN fetch failed for $d : $($_.Exception.Message)" }
 }
 
-$koUpdated = 0
-$koTeams = 0
-foreach ($stage in $koByStage.Keys) {
-  $cfg = $koPrefix[$stage]
-  $sorted = $koByStage[$stage] | Sort-Object { [datetime]$_.utcDate }
+# Sort by UTC date
+$espnSorted = $allEspnEvents | Sort-Object { [datetime]$_.date }
+
+$koTeams = 0; $koUpdated = 0
+foreach ($stageDef in $espnStages) {
+  $stageEvents = $espnSorted | Where-Object {
+    $dt = [datetime]$_.date
+    $dt -ge $stageDef.start -and $dt -lt $stageDef.end
+  }
   $idx = 0
-  foreach ($m in $sorted) {
-    $fid = if ($cfg.singleton) { $cfg.prefix } `
-           elseif ($cfg.pad -gt 0) { "$($cfg.prefix)-$($($idx+1).ToString().PadLeft($cfg.pad,'0'))" } `
-           else { "$($cfg.prefix)-$($idx+1)" }
+  foreach ($ev in $stageEvents) {
+    $comp = $ev.competitions[0]
+    $hComp = $comp.competitors | Where-Object { $_.homeAway -eq 'home' }
+    $aComp = $comp.competitors | Where-Object { $_.homeAway -eq 'away' }
+    $hName = $hComp.team.displayName
+    $aName = $aComp.team.displayName
+
+    # Skip placeholder/TBD entries
+    if (-not $hName -or -not $aName -or $hName -match 'Winner|TBD|Loser' -or $aName -match 'Winner|TBD|Loser') { continue }
+
+    $fid = if ($stageDef.singleton) { $stageDef.prefix } `
+           elseif ($stageDef.pad -gt 0) { "$($stageDef.prefix)-$($($idx+1).ToString().PadLeft($stageDef.pad,'0'))" } `
+           else { "$($stageDef.prefix)-$($idx+1)" }
     $idx++
 
-    $apiH = if ($m.homeTeam.name) { $m.homeTeam.name } else { $m.homeTeam.shortName }
-    $apiA = if ($m.awayTeam.name) { $m.awayTeam.name } else { $m.awayTeam.shortName }
+    $normH = Norm $hName; $normA = Norm $aName
+    $tb = "{`"h`":`"$normH`",`"a`":`"$normA`"}"
+    Invoke-WebRequest -Uri "$fbBase/koTeams/$fid.json" -Method Put -Body $tb `
+      -ContentType 'application/json' -UseBasicParsing | Out-Null
+    Write-Host "  $fid teams: $normH vs $normA"
+    $koTeams++
 
-    # Write team names when known (any status, not just live/finished)
-    if ($apiH -and $apiA -and $apiH -notmatch '^\s*$' -and $apiA -notmatch '^\s*$') {
-      $normH = Norm $apiH; $normA = Norm $apiA
-      $tb = "{`"h`":`"$normH`",`"a`":`"$normA`"}"
-      Invoke-WebRequest -Uri "$fbBase/koTeams/$fid.json" -Method Put -Body $tb `
+    # Score (ESPN: STATUS_FINAL = finished, check for ET via period scores)
+    $st = $comp.status.type.name
+    if ($st -in @('STATUS_FINAL','STATUS_FULL_TIME','STATUS_IN_PROGRESS','STATUS_HALFTIME','STATUS_END_PERIOD')) {
+      # Use linescores to detect ET: more than 2 regular periods means ET played
+      $periods = $comp.linescores
+      $scoreH = [int]$hComp.score; $scoreA = [int]$aComp.score
+      $fbSt   = if ($st -eq 'STATUS_FINAL' -or $st -eq 'STATUS_FULL_TIME') { 'FINISHED' } else { 'IN_PLAY' }
+      $body   = "{`"h`":$scoreH,`"a`":$scoreA,`"status`":`"$fbSt`"}"
+      Invoke-WebRequest -Uri "$fbBase/scores/$fid.json" -Method Put -Body $body `
         -ContentType 'application/json' -UseBasicParsing | Out-Null
-      Write-Host "  $fid teams: $normH vs $normA"
-      $koTeams++
-    }
-
-    # Write score when available; use ET score if match went to extra time
-    $st = $m.status
-    if ($st -in @('IN_PLAY','PAUSED','LIVE','FINISHED')) {
-      $dur = $m.score.duration
-      $scoreH = if ($dur -in @('EXTRA_TIME','PENALTY_SHOOTOUT') -and $null -ne $m.score.extraTime.home) { $m.score.extraTime.home } else { $m.score.fullTime.home }
-      $scoreA = if ($dur -in @('EXTRA_TIME','PENALTY_SHOOTOUT') -and $null -ne $m.score.extraTime.away) { $m.score.extraTime.away } else { $m.score.fullTime.away }
-      if ($null -ne $scoreH -and $null -ne $scoreA) {
-        $body = "{`"h`":$scoreH,`"a`":$scoreA,`"status`":`"$st`"}"
-        Invoke-WebRequest -Uri "$fbBase/scores/$fid.json" -Method Put -Body $body `
-          -ContentType 'application/json' -UseBasicParsing | Out-Null
-        Write-Host "  $fid score: $scoreH-$scoreA [$st]"
-        $koUpdated++
-      }
+      Write-Host "  $fid score: $scoreH-$scoreA [$fbSt]"
+      $koUpdated++
     }
   }
 }

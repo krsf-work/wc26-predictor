@@ -175,47 +175,70 @@ async function main() {
   }
   console.log(`Group stage: ${updated} updated, ${skipped} skipped.`);
 
-  // ── Knockout stage ─────────────────────────────────────────────────────
-  const koByStage = {};
-  for (const m of matches) {
-    const cfg = KO_PREFIX[m.stage];
-    if (!cfg) continue;
-    if (!koByStage[m.stage]) koByStage[m.stage] = [];
-    koByStage[m.stage].push(m);
+  // ── Knockout stage — ESPN API (football-data.org has no bracket yet) ──────
+  const ESPN_BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+  const ESPN_STAGES = [
+    { prefix: 'R32', pad: 2, singleton: false, start: new Date('2026-06-29T00:00:00Z'), end: new Date('2026-07-04T12:00:00Z') },
+    { prefix: 'R16', pad: 0, singleton: false, start: new Date('2026-07-04T12:00:00Z'), end: new Date('2026-07-09T00:00:00Z') },
+    { prefix: 'QF',  pad: 0, singleton: false, start: new Date('2026-07-09T00:00:00Z'), end: new Date('2026-07-13T00:00:00Z') },
+    { prefix: 'SF',  pad: 0, singleton: false, start: new Date('2026-07-13T00:00:00Z'), end: new Date('2026-07-17T12:00:00Z') },
+    { prefix: 'TP',  pad: 0, singleton: true,  start: new Date('2026-07-17T12:00:00Z'), end: new Date('2026-07-19T12:00:00Z') },
+    { prefix: 'FIN', pad: 0, singleton: true,  start: new Date('2026-07-19T12:00:00Z'), end: new Date('2026-07-21T00:00:00Z') },
+  ];
+  const ESPN_DATES = [
+    '20260629','20260630','20260701','20260702','20260703','20260704',
+    '20260705','20260706','20260707','20260708',
+    '20260711','20260712','20260715','20260716','20260718','20260719',
+  ];
+
+  const seenIds = new Set();
+  const allEvents = [];
+  for (const d of ESPN_DATES) {
+    try {
+      const er = await fetch(`${ESPN_BASE}?dates=${d}`);
+      if (!er.ok) continue;
+      const { events = [] } = await er.json();
+      for (const ev of events) {
+        if (seenIds.has(ev.id)) continue;
+        seenIds.add(ev.id);
+        allEvents.push(ev);
+      }
+    } catch { /* network glitch on this date */ }
   }
+  allEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  for (const [stage, cfg] of Object.entries(KO_PREFIX)) {
-    const list = (koByStage[stage] || []).sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
-    for (let i = 0; i < list.length; i++) {
-      const m = list[i];
-      const fid = cfg.singleton ? cfg.prefix
-        : cfg.pad > 0 ? `${cfg.prefix}-${String(i + 1).padStart(cfg.pad, '0')}`
-        : `${cfg.prefix}-${i + 1}`;
+  for (const stage of ESPN_STAGES) {
+    const stageEvs = allEvents.filter(ev => {
+      const dt = new Date(ev.date);
+      return dt >= stage.start && dt < stage.end;
+    });
+    let idx = 0;
+    for (const ev of stageEvs) {
+      const comp = ev.competitions[0];
+      const hComp = comp.competitors.find(c => c.homeAway === 'home');
+      const aComp = comp.competitors.find(c => c.homeAway === 'away');
+      const hName = hComp?.team?.displayName || '';
+      const aName = aComp?.team?.displayName || '';
+      if (!hName || !aName || /Winner|TBD|Loser/i.test(hName) || /Winner|TBD|Loser/i.test(aName)) continue;
 
-      const apiHome = m.homeTeam?.name || m.homeTeam?.shortName || '';
-      const apiAway = m.awayTeam?.name || m.awayTeam?.shortName || '';
+      const fid = stage.singleton ? stage.prefix
+        : stage.pad > 0 ? `${stage.prefix}-${String(idx + 1).padStart(stage.pad, '0')}`
+        : `${stage.prefix}-${idx + 1}`;
+      idx++;
 
-      // Write team names whenever known (not just when playing)
-      if (apiHome && apiAway && apiHome.trim() && apiAway.trim()) {
-        const h = norm(apiHome), a = norm(apiAway);
-        if (await fbPut(`koTeams/${fid}`, { h, a })) {
-          console.log(`  ✓ ${fid} teams: ${h} vs ${a}`);
-          koTeams++;
-        }
+      const h = norm(hName), a = norm(aName);
+      if (await fbPut(`koTeams/${fid}`, { h, a })) {
+        console.log(`  ✓ ${fid} teams: ${h} vs ${a}`);
+        koTeams++;
       }
 
-      // Write score when available; use ET score if match went to extra time
-      const st = m.status;
-      if (['IN_PLAY', 'PAUSED', 'LIVE', 'FINISHED'].includes(st)) {
-        const dur = m.score?.duration;
-        const useET = dur === 'EXTRA_TIME' || dur === 'PENALTY_SHOOTOUT';
-        const h = (useET ? m.score?.extraTime?.home : null) ?? m.score?.fullTime?.home;
-        const a = (useET ? m.score?.extraTime?.away : null) ?? m.score?.fullTime?.away;
-        if (h != null && a != null) {
-          if (await fbPut(`scores/${fid}`, { h, a, status: st })) {
-            console.log(`  ✓ ${fid} score: ${h}-${a} [${st}]`);
-            koScores++;
-          }
+      const st = comp.status?.type?.name || '';
+      if (['STATUS_FINAL','STATUS_FULL_TIME','STATUS_IN_PROGRESS','STATUS_HALFTIME','STATUS_END_PERIOD'].includes(st)) {
+        const scoreH = Number(hComp.score), scoreA = Number(aComp.score);
+        const fbSt = (st === 'STATUS_FINAL' || st === 'STATUS_FULL_TIME') ? 'FINISHED' : 'IN_PLAY';
+        if (await fbPut(`scores/${fid}`, { h: scoreH, a: scoreA, status: fbSt })) {
+          console.log(`  ✓ ${fid} score: ${scoreH}-${scoreA} [${fbSt}]`);
+          koScores++;
         }
       }
     }

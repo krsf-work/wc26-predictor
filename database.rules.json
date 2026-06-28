@@ -12,6 +12,14 @@
       ".write": true
     },
 
+    "koTeams": {
+      ".write": true
+    },
+
+    "finalPicks": {
+      ".write": true
+    },
+
     "meta": {
       ".write": false
     }
